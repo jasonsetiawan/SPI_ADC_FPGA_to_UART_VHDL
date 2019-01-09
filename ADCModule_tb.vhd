@@ -8,7 +8,7 @@ ARCHITECTURE behavior OF tb1 IS
  
     -- Component Declaration for the Unit Under Test (UUT)
  
-    COMPONENT coba_upload
+    COMPONENT ADCModule
     PORT(
          clk_50Mhz : IN  std_logic;
          cs : OUT  std_logic;
@@ -19,7 +19,7 @@ ARCHITECTURE behavior OF tb1 IS
          led_out : OUT  std_logic_vector(7 downto 0);
          state_adc : OUT  std_logic_vector(1 downto 0);
          state_uart : OUT  std_logic_vector(1 downto 0);
-			clk_uart_out : OUT  std_logic
+	 clk_uart_out : OUT  std_logic
         );
     END COMPONENT;
     
@@ -35,7 +35,7 @@ ARCHITECTURE behavior OF tb1 IS
    signal tx_out : std_logic;
    signal led_out : std_logic_vector(7 downto 0);
    signal state_adc : std_logic_vector(1 downto 0);
-	signal state_uart : std_logic_vector(1 downto 0);
+   signal state_uart : std_logic_vector(1 downto 0);
    signal clk_uart_out : std_logic;
 
    -- Clock period definitions
@@ -44,7 +44,7 @@ ARCHITECTURE behavior OF tb1 IS
 BEGIN
  
 	-- Instantiate the Unit Under Test (UUT)
-   uut: coba_upload PORT MAP (
+   uut: ADCModule PORT MAP (
           clk_50Mhz => clk_50Mhz,
           cs => cs,
           din => din,
