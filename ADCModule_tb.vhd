@@ -70,17 +70,6 @@ BEGIN
    stim_proc: process
    begin		
    wait for 1380 ns; dout <= '1';
-	wait for 200 ns; dout <= '0';
-	wait for 200 ns; dout <= '1';
-	wait for 200 ns; dout <= '0';
-	wait for 200 ns; dout <= '1';
-	wait for 200 ns; dout <= '0';
-	wait for 200 ns; dout <= '1';
-	wait for 200 ns; dout <= '0';
-	wait for 200 ns; dout <= '1';
-	wait for 200 ns; dout <= '0';
-	wait for 200 ns; dout <= '1';
-	wait for 200 ns; dout <= '0';
 	wait;
    end process;
 
