@@ -60,10 +60,15 @@ signal uart_tx_data : STD_LOGIC_VECTOR(7 downto 0);
 signal uart_byte_cnt : integer range 0 to 10 := 0;
 signal adc_data1, adc_data2, adc_data3 : std_logic_vector(3 downto 0);
 
+-- Signal used in control unit
+signal spi_to_uart : std_logic := '0';
+signal uart_to_spi : std_logic := '0';
+
 begin
 -- Clock scaling proccess for ADC-SPI
 	clock_scale_proc : process(clk_50Mhz)
-	begin	
+	begin
+	
 		if rising_edge(clk_50Mhz) then
 			if scale_cnt = clk_scaler -1  then
 				clk_10Mhz_temp <= not(clk_10Mhz_temp);
@@ -81,124 +86,140 @@ begin
      if rising_edge(clk_50Mhz) then
        if baudscale_cnt = baud_scaler - 1 then
           clk_temp <= not (clk_temp);
+			 clk_uart_out <= not (clk_temp);
 			 baudscale_cnt <= 0;
        else
           baudscale_cnt <= baudscale_cnt + 1;
        end if;
      end if;
    end process baud_scale_proc;
-	clk_uart_out <= clk_temp;
+	
 
 -- ADC to FPGA using SPI
-	spi_proc : process(clk_10Mhz_temp, clk_temp)
+	spi_proc : process(clk_50Mhz, clk_10Mhz_temp,uart_to_spi)
 	begin
-	
-	if rising_edge(clk_10Mhz_temp) then
-		case trig_spi is
-		when idle =>
---			adc_data <= adc_data_temp;
---			adc_data_temp <= "000000000000";
---			adc_data_tempo <= "000000000000";
-			din <= '0';
-			cs <= '1';
-			byte_cnt <= 0;
-			state_adc <= "00";					
-		when execute =>
+	if (uart_to_spi' event and uart_to_spi = '1') then
 			trig_spi <= execute;
-			cs <= '0';
-			case trig_execute is
-				when din_state =>
-					if byte_cnt = 5 then
-					din <= din_byte(din_index);
-					trig_execute <= dout_state;
-					byte_cnt <= 0;
-					din_index <= 0;
-					send_cnt <= 0;
-					else
-					byte_cnt <= byte_cnt + 1;
-					din <= din_byte(din_index);
-					din_index <= din_index + 1;
-					state_adc <= "01";
-					end if;
-				when dout_state =>
+		end if;
+	
+	if (clk_10Mhz_temp' event and clk_10Mhz_temp = '1') then
+		case trig_spi is
+				when idle =>
+--					adc_data <= adc_data_temp;					
+--					adc_data_temp <= "000000000000";
+--					adc_data_tempo <= "000000000000";
 					din <= '0';
-					if byte_cnt = 11 then
-						adc_data_temp(dout_index) <= dout;
---						adc_data_tempo(dout_index) <= dout;
-						dout_index <= 0;
-						byte_cnt <= 0;
-						trig_execute <= din_state;
-						trig_spi <= idle;
-						uart_tx_sig <= start;
-						uart_byte_cnt <= 0;
-						adc_data1 <= adc_data_temp(11 downto 8);
-                    				adc_data2 <= adc_data_temp(7 downto 4);
-                    				adc_data3 <= adc_data_temp(3 downto 0);
-                    			case (send_cnt) is
-                      				when 0 => uart_tx_data <= "01000001";
-						when 1 => uart_tx_data <= "00101100";
-                      				when 2 => uart_tx_data <= "0000" & adc_data1;
-						when 3 => uart_tx_data <= "00101100";
-						when 4 => uart_tx_data <= adc_data2 & adc_data3;
-						when 5 => uart_tx_data <= "00001010";
-                      		when others => uart_tx_data <= "00000000";
-                    			end case;
-				else
-					adc_data_temp(dout_index) <= dout;
---					adc_data_tempo(dout_index) <= dout;
-					byte_cnt <= byte_cnt + 1;
-					dout_index <= dout_index + 1;
-					state_adc <= "10";
-				end if;						
-				end case;
+					cs <= '1';
+					byte_cnt <= 0;
+					state_adc <= "00";					
+				when execute =>
+					trig_spi <= execute;
+					cs <= '0';
+					case trig_execute is
+						when din_state =>
+							if byte_cnt = 5 then
+								din <= din_byte(din_index);
+								trig_execute <= dout_state;
+								byte_cnt <= 0;
+								din_index <= 0;
+								spi_to_uart <= '0';
+								--*send_cnt <= 0;
+							else
+								byte_cnt <= byte_cnt + 1;
+								din <= din_byte(din_index);
+								din_index <= din_index + 1;
+								state_adc <= "01";
+								end if;
+						when dout_state =>
+							din <= '0';
+							if byte_cnt = 11 then
+								adc_data_temp(dout_index) <= dout;
+--								adc_data_tempo(dout_index) <= dout;
+								dout_index <= 0;
+								byte_cnt <= 0;
+								trig_execute <= din_state;
+								trig_spi <= idle;
+								spi_to_uart <= '1';
+								--*uart_tx_sig <= start;
+								--*uart_byte_cnt <= 0;
+							else
+								adc_data_temp(dout_index) <= dout;
+--								adc_data_tempo(dout_index) <= dout;
+								byte_cnt <= byte_cnt + 1;
+								dout_index <= dout_index + 1;
+								state_adc <= "10";
+							end if;						
+					end case;
 --					count <= byte_cnt;
 --					dout_i <= dout_index;					
 			end case;
 		end if;
+		end process spi_proc;
 
 -- FPGA to PC using UART		
-		if rising_edge(clk_temp) then
+	uart_proc : process(clk_50Mhz,clk_temp,spi_to_uart) begin
+		if (spi_to_uart' event and spi_to_uart = '1') then
+			uart_tx_sig <= start;
+		end if;
+		
+		if (clk_temp' event and clk_temp = '1') then
             if send_cnt < 4 then
 --               data_out <= uart_tx_data;
                 case uart_tx_sig is
                 when idle =>
                    if uart_byte_cnt = 0 then
                         tx_out <= '1';
-			state_uart <= "00";
-			uart_byte_cnt <= 0;
-			send_cnt <= 0;
+								state_uart <= "00";
+								uart_byte_cnt <= 0;
+								send_cnt <= 0;
                    end if;
                 when start =>
-		    state_uart <= "01";
+						  state_uart <= "01";
+						  uart_to_spi <= '0';
                     tx_out <= '0';
+						  uart_byte_cnt <= 0;
                     uart_tx_sig <= data;
-                
-	when data =>
-                state_uart <= "10";                         
-		led_out <= uart_tx_data;
-		if uart_byte_cnt = 7 then
-                tx_out <= uart_tx_data(uart_byte_cnt);
-                uart_byte_cnt <= 0;
-                uart_tx_sig <= stop;
-                else
-                tx_out <= uart_tx_data(uart_byte_cnt);
-                uart_byte_cnt <= uart_byte_cnt + 1;								
-                end if;
+						  adc_data1 <= adc_data_temp(11 downto 8);
+                    adc_data2 <= adc_data_temp(7 downto 4);
+                    adc_data3 <= adc_data_temp(3 downto 0);
+                    case (send_cnt) is
+                      when 0 => uart_tx_data <= "01000001";
+							-- when 1 => uart_tx_data <= "00101100";
+                      when 1 => uart_tx_data <= "0000" & adc_data1;
+							-- when 3 => uart_tx_data <= "00101100";
+							 when 2 => uart_tx_data <= adc_data2 & adc_data3;
+							 --when 5 => uart_tx_data <= "00001010";
+                      when others => uart_tx_data <= "00000000";
+                    end case;
+                when data =>
+                    state_uart <= "10";                         
+						  led_out <= uart_tx_data;
+						  if uart_byte_cnt = 7 then
+                        tx_out <= uart_tx_data(uart_byte_cnt);
+                      --  uart_byte_cnt <= 0;
+                        uart_tx_sig <= stop;
+                    else
+                        tx_out <= uart_tx_data(uart_byte_cnt);
+                        uart_byte_cnt <= uart_byte_cnt + 1;								
+                    end if;
                    
                 when stop =>
-		state_uart <= "11";
-                tx_out <= '1';
-			if send_cnt = 5 then
-			uart_tx_sig <= idle; 
-			trig_spi <= execute;							
-			else
-			uart_tx_sig <= start;
-			send_cnt <= send_cnt + 1;
-			end if;
+						  state_uart <= "11";
+                    tx_out <= '1';
+						  if send_cnt = 2 then
+							uart_tx_sig <= idle;
+							send_cnt <= 0;
+							uart_to_spi <= '1';
+							--*trig_spi <= execute;							
+						  else
+							uart_tx_sig <= start;
+							send_cnt <= send_cnt + 1;
+						  end if;
                 end case;
             else
                 send_cnt <= 0;
             end if;
         end if;
-	end process spi_proc;
+	end process uart_proc;
+	
 end spiMaster_arc;
